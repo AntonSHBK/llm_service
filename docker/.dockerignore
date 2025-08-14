@@ -1,0 +1,9 @@
+# Исключаем кэшированные модели
+app/data/cache_dir/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Pytest cache
+.pytest_cache/
