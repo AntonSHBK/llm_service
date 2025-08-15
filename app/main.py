@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
 from app.routers import api_router
 from app.settings import settings
@@ -36,3 +37,26 @@ def health_check():
     Возвращает `status: ok`, если сервис запущен.
     """
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse, summary="Статус API")
+def root():
+    """
+    Главная страница сервиса.
+    Возвращает сообщение о том, что сервис запущен, и ссылки на документацию.
+    """
+    return """
+    <html>
+        <head>
+            <title>LLM Service API</title>
+        </head>
+        <body>
+            <h1>✅ Сервис работает</h1>
+            <p>Добро пожаловать в API LLM Service.</p>
+            <ul>
+                <li><a href="/docs">Swagger UI</a> — интерактивная документация</li>
+                <li><a href="/redoc">ReDoc</a> — альтернативная документация</li>
+            </ul>
+        </body>
+    </html>
+    """

@@ -1,20 +1,61 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+import io
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from pydantic import BaseModel, Field
 
-from app.models.openai_service import OpenAIService
+from app.models.openai import OpenAIAudioModel
 from app.settings import settings
 
-router = APIRouter(prefix="/audio", tags=["Audio"])
+router = APIRouter(
+    prefix="/audio",
+    tags=["Audio"],
+    responses={500: {"description": "Internal Server Error"}},
+)
 
-llm_service = OpenAIService(api_key=settings.OPENAI_API_KEY)
+audio_service = OpenAIAudioModel(
+    api_key=settings.OPENAI_API_KEY,
+    model_name="gpt-4o-mini-transcribe",
+)
 
-@router.post("/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+
+class AudioResponse(BaseModel):
+    text: str = Field(..., description="Результат транскрипции")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "text": "Добрый день! Сегодня мы поговорим о важности сна..."
+            }
+        }
+    }
+
+
+@router.post(
+    "/transcribe",
+    response_model=AudioResponse,
+    summary="Транскрипция аудиофайла",
+    description="""
+    Принимает аудиофайл и возвращает его текстовую транскрипцию.
+
+    **Поддерживаемые форматы**: mp3, wav, m4a и другие.
+
+    **Пример запроса (cURL)**:
+    ```bash
+    curl -X POST "http://localhost:8000/audio/transcribe" \
+    -H "accept: application/json" \
+    -H "Content-Type: multipart/form-data" \
+    -F "file=@sample.mp3"
+    ```
+    """,
+)
+async def transcribe_audio(file: UploadFile = File(...)) -> AudioResponse:
     try:
-        temp_path = f"/tmp/{file.filename}"
-        with open(temp_path, "wb") as f:
-            f.write(await file.read())
+        audio_bytes = await file.read()
+        audio_stream = io.BytesIO(audio_bytes)
+        audio_stream.name = file.filename
 
-        text = llm_service.transcribe_audio(temp_path)
-        return {"text": text}
+        result_text = audio_service.transcribe(audio_stream)
+
+        return AudioResponse(text=result_text)
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

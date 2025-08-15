@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     # Директории
     DATA_DIR: Path = Field(default=BASE_DIR / "data")
+    AUDIO_DIR: Path = Field(default=BASE_DIR / "data" / "audio")
+    IMAGE_DIR: Path = Field(default=BASE_DIR / "data" / "images")
     CACHE_DIR: Path = Field(default=BASE_DIR / "data" / "cache_dir")
     LOG_DIR: Path = Field(default=BASE_DIR / "logs")
 
@@ -30,7 +32,14 @@ class Settings(BaseSettings):
         case_sensitive=True
     )
 
-    @field_validator("CACHE_DIR", "LOG_DIR", "DATA_DIR", mode="before")
+    @field_validator(
+        "CACHE_DIR", 
+        "LOG_DIR", 
+        "DATA_DIR", 
+        "AUDIO_DIR",
+        "IMAGE_DIR",
+        mode="before"
+    )
     @classmethod
     def validate_paths(cls, value: str | Path) -> Path:
         """Автоматически создаёт директории при инициализации."""

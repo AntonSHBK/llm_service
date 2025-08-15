@@ -4,29 +4,30 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.models.openai_service import OpenAIService
+from app.models.openai import OpenAIChatModel
 from app.settings import settings
 
 router = APIRouter(
     prefix="/chat",
     tags=["Chat"],
-    responses={500: {"description": "Internal Server Error"}}
+    responses={500: {"description": "Internal Server Error"}},
 )
 
-llm_service = OpenAIService(
+chat_service = OpenAIChatModel(
     api_key=settings.OPENAI_API_KEY,
     model_name="gpt-4.1-nano",
-    max_tokens=1024
+    max_tokens=1024,
 )
 
 
 class Message(BaseModel):
-    role: str = Field(..., description="Роль участника: 'user', 'system' или 'assistant'")
+    role: str = Field(..., description="Роль: 'user', 'system' или 'assistant'")
     content: str = Field(..., description="Текст сообщения")
 
 
 class ChatRequest(BaseModel):
     messages: List[Message] = Field(..., description="Список сообщений для модели")
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -40,6 +41,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str = Field(..., description="Сгенерированный ответ модели")
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -55,8 +57,8 @@ class ChatResponse(BaseModel):
     summary="Обычный чат-запрос",
     description="""
     Отправляет список сообщений в модель и возвращает полный ответ целиком.
-
-    **Пример тела запроса**:
+    
+    **Пример**:
     ```json
     {
       "messages": [
@@ -64,13 +66,13 @@ class ChatResponse(BaseModel):
       ]
     }
     ```
-    """
+    """,
 )
-def chat_endpoint(request: ChatRequest):
+def chat_endpoint(request: ChatRequest) -> ChatResponse:
+    """Обработка обычного (непотокового) чата."""
     try:
-        response_text = llm_service.chat(
-            messages=[msg.model_dump() for msg in request.messages],
-            stream=False
+        response_text = chat_service.chat(
+            messages=[msg.model_dump() for msg in request.messages]
         )
         return ChatResponse(response=response_text)
     except Exception as e:
@@ -83,8 +85,8 @@ def chat_endpoint(request: ChatRequest):
     description="""
     Отправляет список сообщений в модель и возвращает ответ **частями** в реальном времени.
     Полезно для чатов, где нужно отображать текст по мере генерации.
-
-    **Пример тела запроса**:
+    
+    **Пример**:
     ```json
     {
       "messages": [
@@ -92,13 +94,13 @@ def chat_endpoint(request: ChatRequest):
       ]
     }
     ```
-    """
+    """,
 )
-def chat_stream_endpoint(request: ChatRequest):
+def chat_stream_endpoint(request: ChatRequest) -> StreamingResponse:
+    """Обработка потокового чата."""
     try:
-        stream_gen = llm_service.chat(
-            messages=[msg.model_dump() for msg in request.messages],
-            stream=True
+        stream_gen = chat_service.chat_stream(
+            messages=[msg.model_dump() for msg in request.messages]
         )
         return StreamingResponse(stream_gen, media_type="text/plain")
     except Exception as e:

@@ -1,35 +1,37 @@
 import sys
 import os
-
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-
-from app.models.openai_service import OpenAIService
+from app.models.openai import OpenAIChatModel
 from app.settings import settings
 
 
 @pytest.fixture(scope="module")
-def openai_service():
-    """Фикстура для инициализации клиента OpenAI."""
-    return OpenAIService(api_key=settings.OPENAI_API_KEY)
+def openai_chat():
+    """Фикстура для инициализации Chat-модели OpenAI."""
+    return OpenAIChatModel(
+        api_key=settings.OPENAI_API_KEY,
+        model_name="gpt-4.1-nano",
+        max_tokens=1024
+    )
 
 
-def test_chat_simple(openai_service):
-    """Проверка, что чат возвращает непустой ответ."""
+def test_chat_simple(openai_chat: OpenAIChatModel):
+    """Проверка, что обычный чат возвращает непустой ответ."""
     messages = [{"role": "user", "content": "Привет, как тебя зовут?"}]
-    response = openai_service.chat(messages=messages, stream=False)
+    response = openai_chat.chat(messages=messages)
 
     assert isinstance(response, str), "Ответ должен быть строкой"
     assert len(response.strip()) > 0, "Ответ не должен быть пустым"
     print("\nОтвет модели:", response)
 
 
-def test_chat_streaming(openai_service):
+def test_chat_streaming(openai_chat: OpenAIChatModel):
     """Проверка работы потокового режима (stream=True)."""
     messages = [{"role": "user", "content": "Напиши 3 слова"}]
-    stream_gen = openai_service.chat(messages=messages, stream=True)
+    stream_gen = openai_chat.chat_stream(messages=messages)
 
     collected = ""
     for chunk in stream_gen:
