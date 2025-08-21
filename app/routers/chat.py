@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.models.openai import OpenAIChatModel
+from app.models.openai import OpenAITextModel
 from app.settings import settings
 
 router = APIRouter(
@@ -13,7 +13,7 @@ router = APIRouter(
     responses={500: {"description": "Internal Server Error"}},
 )
 
-chat_service = OpenAIChatModel(
+chat_service = OpenAITextModel(
     api_key=settings.OPENAI_API_KEY,
     model_name="gpt-4.1-nano",
     max_tokens=1024,

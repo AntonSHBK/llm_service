@@ -4,21 +4,21 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from app.models.openai import OpenAIChatModel
+from app.models.openai import OpenAITextModel
 from app.settings import settings
 
 
 @pytest.fixture(scope="module")
 def openai_chat():
     """Фикстура для инициализации Chat-модели OpenAI."""
-    return OpenAIChatModel(
+    return OpenAITextModel(
         api_key=settings.OPENAI_API_KEY,
         model_name="gpt-4.1-nano",
         max_tokens=1024
     )
 
 
-def test_chat_simple(openai_chat: OpenAIChatModel):
+def test_chat_simple(openai_chat: OpenAITextModel):
     """Проверка, что обычный чат возвращает непустой ответ."""
     messages = [{"role": "user", "content": "Привет, как тебя зовут?"}]
     response = openai_chat.chat(messages=messages)
@@ -28,7 +28,7 @@ def test_chat_simple(openai_chat: OpenAIChatModel):
     print("\nОтвет модели:", response)
 
 
-def test_chat_streaming(openai_chat: OpenAIChatModel):
+def test_chat_streaming(openai_chat: OpenAITextModel):
     """Проверка работы потокового режима (stream=True)."""
     messages = [{"role": "user", "content": "Напиши 3 слова"}]
     stream_gen = openai_chat.chat_stream(messages=messages)

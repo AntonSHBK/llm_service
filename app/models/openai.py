@@ -4,21 +4,26 @@ from pathlib import Path
 from typing import Generator, Optional, Any, Union, BinaryIO, IO
 
 from openai import OpenAI, APIError
+from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
+from openai._streaming import Stream
 
-from app.models.base_model import BaseLLMService
+from app.models.base_model import (
+    TextGanerateModel,
+    AudioGenerateModel,
+    AudioTranscribeModel,
+    ImageGenerateModel
+)
 from app.services.token_manager import TokenManager
 
 
-class OpenAIChatModel(BaseLLMService):
-    """
-    Сервис для работы с чат-моделями OpenAI (обычный и потоковый режим).
-    """
+class OpenAITextModel(TextGanerateModel):
 
     def __init__(
         self,
         api_key: Optional[str],
         model_name: str = "gpt-4.1-nano",
-        max_tokens: Optional[int] = 4048,
+        max_tokens: Optional[int] = 2048,
         **kwargs
     ):
         super().__init__(model_name, **kwargs)
@@ -27,10 +32,6 @@ class OpenAIChatModel(BaseLLMService):
         self.logger.info(f"Chat модель OpenAI инициализирован с моделью {self.model_name}")
 
     def _validate_token_limit(self, messages: list[dict[str, str]]) -> None:
-        """
-        Проверка лимита токенов для сообщений.
-        Если max_tokens=None — проверка пропускается.
-        """
         if self.max_tokens is None:
             self.logger.debug("Лимит токенов не установлен — проверка пропущена.")
             return
@@ -38,42 +39,41 @@ class OpenAIChatModel(BaseLLMService):
         if total_tokens > self.max_tokens:
             self.logger.warning(f"Превышен лимит токенов ({total_tokens}/{self.max_tokens})")
             raise ValueError(f"Превышен лимит токенов: {total_tokens}/{self.max_tokens}")
-        self.logger.debug(f"Токены в норме: {total_tokens}/{self.max_tokens}")
+        # self.logger.debug(f"Токены в норме: {total_tokens}/{self.max_tokens}")
 
-    def chat(self, messages: list[dict[str, str]], **kwargs) -> str:
-        # https://platform.openai.com/docs/api-reference/responses/create
-        """
-        Обычный чат-запрос — возвращает полный ответ модели.
-        """
+    def generate(self, messages: list[dict[str, str]], **kwargs) -> str:
+        # https://platform.openai.com/docs/api-reference/chat/create
         self._validate_token_limit(messages)
+
         try:
-            resp = self.client.chat.completions.create(
+            resp: ChatCompletion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 **kwargs
             )
-            content = resp.choices[0].message.content
+            content: str = resp.choices[0].message.content or ""
             self.logger.debug(f"Ответ модели: {content}")
             return content
+
         except APIError as e:
-            self.logger.error(f"Ошибка OpenAI API во время обычного чата: {e}")
+            self.logger.error(f"Ошибка OpenAI API во время generate_text: {e}")
             raise
 
-    def chat_stream(self, messages: list[dict[str, str]], **kwargs) -> Generator[str, None, None]:
-        # https://platform.openai.com/docs/api-reference/responses/create
-        """
-        Потоковый чат-запрос — возвращает ответ частями.
-        """
+    def generate_stream(
+        self, messages: list[dict[str, str]], **kwargs
+    ) -> Generator[str, None, None]:
+        # https://platform.openai.com/docs/api-reference/chat/create
         self._validate_token_limit(messages)
+
         try:
-            stream_resp = self.client.chat.completions.create(
+            stream_resp: Stream[ChatCompletionChunk] = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 stream=True,
                 **kwargs
             )
 
-            def stream_generator():
+            def stream_generator() -> Generator[str, None, None]:
                 for chunk in stream_resp:
                     delta = chunk.choices[0].delta.content
                     if delta:
@@ -81,15 +81,12 @@ class OpenAIChatModel(BaseLLMService):
                         yield delta
 
             return stream_generator()
+
         except APIError as e:
-            self.logger.error(f"Ошибка OpenAI API во время потокового чата: {e}")
+            self.logger.error(f"Ошибка OpenAI API во время generate_text_stream: {e}")
             raise
 
-
-class OpenAIAudioModel(BaseLLMService):
-    """
-    Модель для транскрипции аудио с помощью OpenAI.
-    """
+class OpenAIAudioTranscribeModel(AudioTranscribeModel):
 
     def __init__(
         self,
@@ -101,38 +98,28 @@ class OpenAIAudioModel(BaseLLMService):
         self.client = OpenAI(api_key=api_key)
         self.logger.info(f"Audio модель OpenAI инициализирована с моделью {self.model_name}")
       
-    def transcribe(
+    def generate(
         self,
         audio_source: Union[str, Path, io.BytesIO],
         filename: Optional[str] = None,
-        language: str = "ru",
         **kwargs
     ) -> str:
-        """
-        Транскрипция аудио.
-        :param audio_source: путь к файлу или файловый поток BytesIO
-        :param filename: имя файла (обязательно при BytesIO)
-        :param language: язык аудио (ISO-639-1), по умолчанию "ru"
-        """
+        
         try:
             if isinstance(audio_source, (str, Path)):
                 file_obj = open(audio_source, "rb")
-                fname = Path(audio_source).name
+                filename = Path(audio_source).name
             elif isinstance(audio_source, io.BytesIO):
-                if not filename:
-                    filename = "audio.wav"
                 audio_source.name = filename
-                fname = filename
                 file_obj = audio_source
             else:
                 raise ValueError("audio_source должен быть путем к файлу или BytesIO")
 
-            self.logger.debug(f"Отправка файла {fname} на транскрипцию...")
+            self.logger.debug(f"Отправка файла {filename} на транскрипцию...")
 
             resp = self.client.audio.transcriptions.create(
                 model=self.model_name,
                 file=file_obj,
-                language=language,
                 **kwargs
             )
 
@@ -143,10 +130,7 @@ class OpenAIAudioModel(BaseLLMService):
             self.logger.error(f"Ошибка OpenAI API при транскрипции аудио: {e}")
             raise
 
-class OpenAIImageModel(BaseLLMService):
-    """
-    Модель для генерации изображений с помощью OpenAI.
-    """
+class OpenAIImageModel(ImageGenerateModel):
 
     def __init__(
         self,
@@ -168,10 +152,7 @@ class OpenAIImageModel(BaseLLMService):
         n: Optional[int] = None,
         **kwargs
     ) -> list[bytes]:
-        """
-        Генерация изображения по текстовому описанию.
-        Возвращает список байтов (decoded PNG/JPEG/WebP).
-        """
+
         try:
             resp = self.client.images.generate(
                 model=self.model_name,

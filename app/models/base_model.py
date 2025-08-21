@@ -20,3 +20,35 @@ class BaseLLMService(ABC):
         )        
 
         self.logger.info(f"Инициализация модели: {model_name}, ")
+        
+        
+class TextGanerateModel(BaseLLMService):
+
+    @abstractmethod
+    def generate(self, **kwargs):
+        pass
+    
+    @abstractmethod
+    def generate_stream(self, **kwargs):
+        pass
+    
+    
+class AudioTranscribeModel(BaseLLMService):
+    
+    @abstractmethod
+    def generate(self, **kwargs):
+        pass
+    
+    
+class AudioGenerateModel(BaseLLMService):
+
+    @abstractmethod
+    def generate(self,**kwargs):
+        pass
+
+
+class ImageGenerateModel(BaseLLMService):
+
+    @abstractmethod
+    def generate(self, **kwargs):
+        pass

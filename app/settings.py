@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import torch
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator, Field
 
@@ -11,7 +12,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     """Глобальные настройки приложения."""
-
+    
+    DEVICE: str = Field(
+        default="cuda" if torch.cuda.is_available() else "cpu", 
+        description="Устройство для выполнения моделей: 'cpu' или 'cuda'"
+    )
     # Директории
     DATA_DIR: Path = Field(default=BASE_DIR / "data")
     AUDIO_DIR: Path = Field(default=BASE_DIR / "data" / "audio")
@@ -20,8 +25,17 @@ class Settings(BaseSettings):
     LOG_DIR: Path = Field(default=BASE_DIR / "logs")
 
     # API ключи
-    OPENAI_API_KEY: str = Field(..., description="API ключ OpenAI")
-    LANGCHAIN_API_KEY: str | None = Field(None, description="Опциональный API ключ LangChain")
+    OPENAI_API_KEY: str = Field(
+        ..., description="API ключ OpenAI"
+    )    
+    YANDEX_API_KEY: str = Field(
+        ...,
+        description="API ключ Яндекс Облака"
+    )
+    YANDEX_FOLDER_ID: str = Field(
+        ...,
+        description="ID папки в Яндекс Облаке для Yandex Foundation Models"
+    )
 
     # Логирование
     LOG_LEVEL: str = Field(default="INFO")
