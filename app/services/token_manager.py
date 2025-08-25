@@ -28,7 +28,7 @@ class TokenManager:
     def count_message_tokens(cls, messages: list[dict], model_name: str) -> int:
         total_tokens = 0
         for m in messages:
-            total_tokens += cls.count_tokens(m.get("role", ""), model_name)
-            total_tokens += cls.count_tokens(m.get("content", ""), model_name)
+            for key, value in m.items():
+                total_tokens += cls.count_tokens(value, model_name)
         cls.logger.debug(f"Общее количество токенов в сообщениях: {total_tokens}")
         return total_tokens

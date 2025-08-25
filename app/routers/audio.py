@@ -2,7 +2,7 @@ import io
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 
-from app.models.openai import OpenAIAudioTranscribeModel
+from app.models.openai import OpenAITranscribeModel
 from app.settings import settings
 
 router = APIRouter(
@@ -11,11 +11,11 @@ router = APIRouter(
     responses={500: {"description": "Internal Server Error"}},
 )
 
-audio_service = OpenAIAudioTranscribeModel(
+audio_service = OpenAITranscribeModel(
     api_key=settings.OPENAI_API_KEY,
     model_name="gpt-4o-mini-transcribe",
 )
-
+Т
 
 class AudioResponse(BaseModel):
     text: str = Field(..., description="Результат транскрипции")
@@ -51,9 +51,11 @@ async def transcribe_audio(file: UploadFile = File(...)) -> AudioResponse:
     try:
         audio_bytes = await file.read()
         audio_stream = io.BytesIO(audio_bytes)
-        audio_stream.name = file.filename
 
-        result_text = audio_service.generate(audio_stream)
+        result_text = audio_service.generate(
+            audio_stream,
+            filename=file.filename
+        )
 
         return AudioResponse(text=result_text)
 

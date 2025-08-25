@@ -11,7 +11,7 @@ from app.models.base_model import TextGanerateModel, ImageGenerateModel, AudioTr
 from app.services.token_manager import TokenManager
 
 
-class YandexChatModel(TextGanerateModel):
+class YandexTextModel(TextGanerateModel):
     # https://yandex.cloud/ru/docs/foundation-models/operations/yandexgpt/create-chat
     def __init__(
         self,
@@ -54,7 +54,7 @@ class YandexChatModel(TextGanerateModel):
         return self.generate(messages, **kwargs)
 
 
-class YandexArtModel(ImageGenerateModel):
+class YandexImageModel(ImageGenerateModel):
     # https://yandex.cloud/ru/docs/foundation-models/operations/yandexart/request
     def __init__(
         self,
@@ -99,86 +99,22 @@ class YandexArtModel(ImageGenerateModel):
 
 
 class YandexSpeechToTextModel(AudioTranscribeModel):
-    # https://yandex.cloud/ru/docs/speechkit/
-
-    def __init__(
-        self,
-        folder_id: str,
-        auth: str,
-        model_name: str = "general",
-        language: str = "ru-RU",
-        **kwargs
-    ):
-        """
-        :param folder_id: ID каталога Yandex Cloud
-        :param auth: API-ключ сервисного аккаунта
-        :param model_name: имя модели SpeechKit (обычно "general")
-        :param language: язык распознавания ("ru-RU", "en-US", ...)
-        """
-        super().__init__(model_name, **kwargs)
-        self.language = language
-        self.sdk = YCloudML(folder_id=folder_id, auth=auth)
-        self.model = self.sdk.models.speech_to_text(model_name)
-        self.logger.info(f"Yandex SpeechKit модель инициализирована: {model_name}")
-
-    def generate(
-        self,
-        audio_source: Union[str, Path, io.BytesIO],
-        filename: Optional[str] = None,
-        **kwargs
-    ) -> str:
-        """
-        Транскрипция аудио.
-        :param audio_source: путь к файлу или BytesIO
-        :param filename: имя файла (нужно при BytesIO)
-        :param kwargs: параметры SpeechKit (например, enable_automatic_punctuation=True)
-        :return: текст транскрипции
-        """
-        try:
-            if isinstance(audio_source, (str, Path)):
-                with open(audio_source, "rb") as f:
-                    file_bytes = f.read()
-            elif isinstance(audio_source, io.BytesIO):
-                file_bytes = audio_source.read()
-            else:
-                raise ValueError("audio_source должен быть путем к файлу или BytesIO")
-
-            self.logger.debug("Отправка аудио в SpeechKit...")
-
-            operation = self.model.run_deferred(
-                file_bytes,
-                language=self.language,
-                **kwargs
-            )
-            result = operation.wait()
-
-            text = result.text if hasattr(result, "text") else str(result)
-            self.logger.info(f"Транскрипция завершена: {len(text)} символов")
-            return text
-
-        except YCloudMLError as e:
-            self.logger.error(f"Ошибка Yandex SpeechKit: {e}")
-            raise
-
-
-class YandexSpeechToTextModel(AudioTranscribeModel):
     # https://yandex.cloud/ru/docs/speechkit/quickstart/stt-quickstart-v1
 
     def __init__(
         self,
         api_key: str,
         model_name: str = "speechkit-stt",
-        language: str = "ru-RU",
         **kwargs
     ):
         super().__init__(model_name, **kwargs)
         self.api_key = api_key
-        self.language = language
         self.api_url = "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize"
 
     def generate(
         self,
         audio_source: Union[str, Path, io.BytesIO],
+        language: Optional[str] = "ru-RU",
         filename: Optional[str] = None,
         **kwargs
     ) -> str:
@@ -197,16 +133,14 @@ class YandexSpeechToTextModel(AudioTranscribeModel):
         else:
             raise ValueError("audio_source должен быть путем к файлу или BytesIO")
 
-        lang = kwargs.get("lang", self.language)
-
         headers = {
             "Authorization": f"Api-Key {self.api_key}"
         }
         params = {
-            "lang": lang
+            "lang": language
         }
 
-        self.logger.debug(f"Отправка аудио в Yandex STT, lang={lang}, size={len(audio_bytes)} байт")
+        self.logger.debug(f"Отправка аудио в Yandex STT, lang={language}, size={len(audio_bytes)} байт")
 
         response = requests.post(
             self.api_url,

@@ -51,7 +51,7 @@ def root():
             <title>LLM Service API</title>
         </head>
         <body>
-            <h1>✅ Сервис работает</h1>
+            <h1>Сервис работает</h1>
             <p>Добро пожаловать в API LLM Service.</p>
             <ul>
                 <li><a href="/docs">Swagger UI</a> — интерактивная документация</li>

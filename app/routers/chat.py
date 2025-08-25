@@ -15,13 +15,13 @@ router = APIRouter(
 
 chat_service = OpenAITextModel(
     api_key=settings.OPENAI_API_KEY,
-    model_name="gpt-4.1-nano",
+    model_name="gpt-5-nano",
     max_tokens=1024,
 )
 
 
 class Message(BaseModel):
-    role: str = Field(..., description="Роль: 'user', 'system' или 'assistant'")
+    role: str = Field(..., description="Роль: 'user', 'system', 'assistant' и т.д.")
     content: str = Field(..., description="Текст сообщения")
 
 
@@ -52,7 +52,7 @@ class ChatResponse(BaseModel):
 
 
 @router.post(
-    "/",
+    "/text",
     response_model=ChatResponse,
     summary="Обычный чат-запрос",
     description="""
@@ -69,22 +69,20 @@ class ChatResponse(BaseModel):
     """,
 )
 def chat_endpoint(request: ChatRequest) -> ChatResponse:
-    """Обработка обычного (непотокового) чата."""
     try:
-        response_text = chat_service.chat(
-            messages=[msg.model_dump() for msg in request.messages]
+        resp = chat_service.generate(
+            input=[msg.model_dump() for msg in request.messages]
         )
-        return ChatResponse(response=response_text)
+        return ChatResponse(response=resp.output_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(
-    "/stream",
+    "/text_stream",
     summary="Потоковый чат-запрос",
     description="""
     Отправляет список сообщений в модель и возвращает ответ **частями** в реальном времени.
-    Полезно для чатов, где нужно отображать текст по мере генерации.
     
     **Пример**:
     ```json
@@ -99,9 +97,50 @@ def chat_endpoint(request: ChatRequest) -> ChatResponse:
 def chat_stream_endpoint(request: ChatRequest) -> StreamingResponse:
     """Обработка потокового чата."""
     try:
-        stream_gen = chat_service.chat_stream(
-            messages=[msg.model_dump() for msg in request.messages]
+        stream = chat_service.generate_stream(
+            input=[msg.model_dump() for msg in request.messages]
         )
-        return StreamingResponse(stream_gen, media_type="text/plain")
+
+        def stream_gen():
+            for event in stream:
+                if event.type == "response.output_text.delta":
+                    yield event.delta
+                elif event.type == "response.refusal.delta":
+                    yield f"[REFUSAL] {event.delta}"
+
+        return StreamingResponse(stream_gen(), media_type="text/plain")
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+# class StructuredRequest(BaseModel):
+#     query: str = Field(..., description="Пользовательский запрос для генерации")
+
+# class StructuredResponse(BaseModel):
+#     title: str
+#     summary: str
+#     tags: List[str]
+
+# @router.post("/text_structured", response_model=StructuredResponse)
+# def generate_structured_text(payload: StructuredRequest):
+#     try:
+#         llm = OpenAITextModel(api_key=settings.OPENAI_API_KEY)
+
+#         # задаём системный промт, чтобы модель ответила строго в JSON
+#         system_msg = llm.complete_input(
+#             "system",
+#             "Ты помощник, который отвечает строго в JSON с ключами: title, summary, tags."
+#         )
+#         user_msg = llm.get_message("user", payload.query)
+
+#         messages = [system_msg, user_msg]
+
+#         response_text = llm.generate(
+#             messages=messages,
+#             response_format={"type": "json_object"}
+#         )
+
+#         return StructuredResponse.parse_raw(response_text)
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))

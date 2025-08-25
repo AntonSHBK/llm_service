@@ -6,20 +6,20 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from app.models.openai import OpenAIAudioTranscribeModel
+from app.models.openai import OpenAITranscribeModel
 from app.settings import settings
 
 
 @pytest.fixture(scope="module")
 def openai_audio():
     """Фикстура для инициализации модели транскрипции."""
-    return OpenAIAudioTranscribeModel(
+    return OpenAITranscribeModel(
         api_key=settings.OPENAI_API_KEY,
         model_name="gpt-4o-mini-transcribe"
     )
 
 
-def test_transcribe_audio(openai_audio: OpenAIAudioTranscribeModel):
+def test_transcribe_audio(openai_audio: OpenAITranscribeModel):
     """Проверка транскрипции аудиофайла (байтовый поток)."""
     audio_path = Path(__file__).parent / "test.wav"
     assert audio_path.exists(), f"Тестовый аудиофайл не найден: {audio_path}"

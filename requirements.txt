@@ -8,3 +8,5 @@ pytest
 tiktoken
 torch
 faster_whisper
+opencv-python
+skimage
