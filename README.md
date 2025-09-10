@@ -61,36 +61,134 @@ curl http://127.0.0.1:8000/health
 
 ## Примеры API
 
+### Чат
+
 **Обычный чат:**
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/chat/" \
+curl -X POST "http://127.0.0.1:8000/chat/text" \
 -H "Content-Type: application/json" \
--d '{"messages":[{"role":"user","content":"Напиши стих"}]}'
+-d '{"input":[{"role":"user","content":"Напиши стих"}]}'
 ```
 
 **Потоковый чат:**
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/chat/stream" \
+curl -X POST "http://127.0.0.1:8000/chat/text_stream" \
 -H "Content-Type: application/json" \
--d '{"messages":[{"role":"user","content":"Напиши рассказ про кота"}]}'
+-d '{"input":[{"role":"user","content":"Напиши рассказ про кота"}]}'
+```
+
+---
+
+### Аудио
+
+**Транскрипция аудио (speech → text):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/audio/transcribe" \
+-H "accept: application/json" \
+-H "Content-Type: multipart/form-data" \
+-F "file=@test.wav"
+```
+
+**Генерация аудио (text → speech, файл):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/tts/tts_file" \
+-H "Content-Type: application/json" \
+-d '{"text":"Привет, это тест синтеза речи","voice":"alloy","format":"mp3"}' \
+--output result.mp3
+```
+
+**Генерация аудио (text → speech, поток):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/tts/tts_bytes" \
+-H "Content-Type: application/json" \
+-d '{"text":"Привет, это тест синтеза речи в потоковом режиме","voice":"alloy","format":"wav"}' \
+--output result.wav
+```
+
+---
+
+### Изображения (OpenAI)
+
+**Генерация изображения (байты → PNG):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/image/openai_bytes" \
+-H "Content-Type: application/json" \
+-d '{"prompt":"Иконка кота","n":1,"size":"256x256"}' \
+--output cat.png
+```
+
+**Генерация изображения (файл → PNG/ZIP):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/image/openai_file" \
+-H "Content-Type: application/json" \
+-d '{"prompt":"Пейзаж с горами","n":2,"size":"512x512"}' \
+--output images.zip
+```
+
+---
+
+### Изображения (YandexART)
+
+**Генерация изображения (байты → PNG):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/image/yandex_bytes" \
+-H "Content-Type: application/json" \
+-d '{"prompt":"Силуэт дерева","n":1,"size":"1:1"}' \
+--output tree.png
+```
+
+**Генерация изображения (файл → PNG/ZIP):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/image/yandex_file" \
+-H "Content-Type: application/json" \
+-d '{"prompt":"Закат над морем","n":3,"size":"1:1"}' \
+--output sunset.zip
 ```
 
 ## Запуск тестов
 
-Убедитесь, что в `.env` задан `OPENAI_API_KEY`.
+Убедись, что в `.env` заданы ключи:
 
-**Запуск всех тестов:**
+* `OPENAI_API_KEY`
+* `YANDEX_API_KEY`
+* `YANDEX_FOLDER_ID`
+
+---
+
+### Запуск всех тестов
 
 ```bash
 pytest app/tests -v
 ```
 
-**Запуск конкретного теста:**
+### Запуск тестов по папке
 
 ```bash
-pytest app/tests/test_chat.py -v
-pytest app/tests/test_audio.py -v
-pytest app/tests/test_image.py -v
+pytest app/tests/api -v        # только API-тесты
+pytest app/tests/models -v     # только тесты моделей
+```
+
+### Запуск конкретного файла
+
+```bash
+pytest app/tests/models/test_chat.py -v
+pytest app/tests/api/test_chat_api.py -v
+pytest app/tests/api/test_img_api.py -v
+pytest app/tests/models/test_audio.py -v
+pytest app/tests/models/test_image.py -v
+```
+
+### Запуск конкретного теста внутри файла
+
+```bash
+pytest app/tests/models/test_image.py::test_openai_image_generate_bytes -v
 ```

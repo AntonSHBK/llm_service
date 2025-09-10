@@ -71,27 +71,36 @@ class YandexImageModel(ImageGenerateModel):
     def generate(
         self,
         prompt: Union[str, list[Union[str, dict]]],
-        output_path: Optional[str] = None,
+        output_path: Optional[Union[str, Path]] = None,
+        as_bytes: bool = True,
         **kwargs
-    ):
+    ) -> Union[bytes, Path]:
         """
         Сгенерировать изображение по промту.
+
         :param prompt: строка или список строк/словари вида {"text": "...", "weight": N}
         :param output_path: путь для сохранения результата (если нужен файл)
+        :param as_bytes: если True — вернуть байты, иначе сохранить в файл
         :param kwargs: width_ratio, height_ratio, seed и другие параметры
-        :return: объект ImageGenerationModelResult
+        :return: bytes | Path
         """
         try:
             model_cfg = self.model.configure(**kwargs)
             operation = model_cfg.run_deferred(prompt)
             result = operation.wait()
 
-            if output_path:
-                path = Path(output_path)
-                path.write_bytes(result.image_bytes)
-                self.logger.info(f"Изображение сохранено в {output_path}")
+            if as_bytes:
+                self.logger.info(f"Изображение сгенерировано, размер {len(result.image_bytes)} байт")
+                return result.image_bytes
 
-            return result
+            if output_path is None:
+                output_path = Path("yandex_image.png")
+            else:
+                output_path = Path(output_path)
+
+            output_path.write_bytes(result.image_bytes)
+            self.logger.info(f"Изображение сохранено в {output_path}")
+            return output_path
 
         except YCloudMLError as e:
             self.logger.error(f"Ошибка YandexART: {e}")

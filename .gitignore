@@ -3,3 +3,4 @@ app/data
 **logs
 **__pycache__
 **.env
+**data

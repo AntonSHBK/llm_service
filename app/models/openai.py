@@ -15,6 +15,18 @@ from app.models.base_model import (
 )
 from app.services.token_manager import TokenManager
 
+VoiceType = Literal[
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "fable",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+]
 
 class OpenAITextModel(TextGanerateModel):
 
@@ -101,34 +113,13 @@ class OpenAITextModel(TextGanerateModel):
                 **kwargs
             )
             self.logger.debug(f"Ответ модели: {resp.output_text}")
+            # return resp.output_text
             return resp
 
         except APIError as e:
             self.logger.error(f"Ошибка OpenAI API во время generate(): {e}")
             raise
         
-    def generate_with_shema(
-        self,
-        input: list[dict[str, str]],
-        text_format: Any,
-        model_name: str = "gpt-5-nano",
-        **kwargs
-    ) -> ParsedResponse:
-        self._validate_token_limit(input)
-        try:
-            resp: ParsedResponse = self.client.responses.parse(
-                model=model_name,
-                input=input,
-                text_format=text_format,
-                **kwargs
-            )
-            self.logger.debug(f"Ответ модели с разбором в схему {text_format}: {resp.output_parsed}")
-            return resp
-
-        except APIError as e:
-            self.logger.error(f"Ошибка OpenAI API во время generate_with_shema(): {e}")
-            raise
-      
     def generate_stream(
         self, 
         input: list[dict[str, str]], 
@@ -159,9 +150,66 @@ class OpenAITextModel(TextGanerateModel):
         except APIError as e:
             self.logger.error(f"Ошибка OpenAI API во время generate_stream(): {e}")
             raise
+        
+    def generate_with_shema_pydantic(
+        self,
+        input: list[dict[str, str]],
+        text_format: Any,
+        model_name: str = "gpt-5-nano",
+        **kwargs
+    ) -> ParsedResponse:
+        # https://platform.openai.com/docs/guides/structured-outputs
+        self._validate_token_limit(input)
+        try:
+            resp: ParsedResponse = self.client.responses.parse(
+                model=model_name,
+                input=input,
+                text_format=text_format,
+                **kwargs
+            )
+            self.logger.debug(f"Ответ модели с разбором в схему {text_format}: {resp.output_parsed}")
+            # return resp.output_parsed
+            return resp
+
+        except APIError as e:
+            self.logger.error(f"Ошибка OpenAI API во время generate_with_shema(): {e}")
+            raise   
+        
+    def generate_with_schema(
+        self,
+        input: list[dict[str, str]],
+        json_schema: dict,
+        model_name: str = "gpt-5-nano",
+        **kwargs
+    ) -> Response:
+        """
+        Генерация текста с использованием ручной JSON Schema.
+
+        :param input: список сообщений [{"role": "...", "content": "..."}]
+        :param json_schema: схема в формате dict (см. https://platform.openai.com/docs/guides/structured-outputs)
+        :param model_name: модель (по умолчанию gpt-5-nano)
+        :return: Response с текстом, соответствующим схеме
+        """
+        self._validate_token_limit(input)
+        try:
+            resp: Response = self.client.responses.create(
+                model=model_name,
+                input=input,
+                text=json_schema,
+                **kwargs
+            )
+            self.logger.debug(
+                f"Ответ модели с использованием json_schema={json_schema.get('format', {}).get('name')}: {resp.output_text}"
+            )
+            # return resp.output_text
+            return resp
+
+        except APIError as e:
+            self.logger.error(f"Ошибка OpenAI API во время generate_with_shema(): {e}")
+            raise        
     
+    @staticmethod
     def complete_input(
-        self, 
         role: Literal["system", "developer", "user", "assistant", "tool"], 
         context: str
     ) -> dict[str, str]:
@@ -182,24 +230,68 @@ class OpenAITextModel(TextGanerateModel):
         """
         # https://platform.openai.com/docs/guides/text#message-roles-and-instruction-following
         pass
+       
     
-    def build_json_shema(self):
-        """
-        Параметр при генерации называется text_format (pedantic) и text для ручного описания
-        
-        Пример pedantic:
-        from openai import OpenAI
-        from pydantic import BaseModel
+class OpenAITTSModel(AudioTranscribeModel):
+    """
+    Класс для генерации аудио из текста с помощью OpenAI TTS (gpt-4o-mini-tts).
+    """
 
-        client = OpenAI()
+    def __init__(
+        self,
+        api_key: Optional[str],
+        model_name: str = "gpt-4o-mini-tts",
+        **kwargs
+    ):
+        super().__init__(model_name, **kwargs)
+        self.client = OpenAI(api_key=api_key)
+        self.logger.info(f"TTS модель OpenAI инициализирована с моделью {self.model_name}")
 
-        class CalendarEvent(BaseModel):
-            name: str
-            date: str
-            participants: list[str]         
+    def generate(
+        self,
+        text: str,
+        output_path: Optional[Union[str, Path]] = None,
+        voice: VoiceType = "alloy",
+        response_format: str = "wav",
+        as_bytes: bool = False,
+        **kwargs
+    ) -> Union[Path, bytes]:
         """
-        # https://platform.openai.com/docs/guides/structured-outputs?example=chain-of-thought#refusals
-        pass
+        Генерация речи из текста.
+
+        :param text: Текст для озвучивания
+        :param output_path: Путь для сохранения файла (если as_bytes=False)
+        :param voice: Голос (по умолчанию alloy)
+        :param response_format: Формат файла (wav/mp3/ogg)
+        :param as_bytes: Если True — вернуть байты вместо пути к файлу
+        :return: Path | bytes
+        """
+        try:
+            self.logger.debug(f"Генерация речи из текста: '{text[:50]}...'")
+
+            with self.client.audio.speech.with_streaming_response.create(
+                model=self.model_name,
+                voice=voice,
+                input=text,
+                response_format=response_format,
+                **kwargs
+            ) as response:
+                if as_bytes:
+                    audio_bytes = response.read()
+                    self.logger.info("Аудио успешно сгенерировано (в байтах)")
+                    return audio_bytes
+                else:
+                    if output_path is None:
+                        output_path = Path(f"speech.{response_format}")
+                    else:
+                        output_path = Path(output_path)
+                    response.stream_to_file(output_path)
+                    self.logger.info(f"Аудио успешно сгенерировано: {output_path}")
+                    return output_path
+
+        except APIError as e:
+            self.logger.error(f"Ошибка OpenAI API при генерации речи: {e}")
+            raise
     
 
 class OpenAITranscribeModel(AudioTranscribeModel):
@@ -245,6 +337,7 @@ class OpenAITranscribeModel(AudioTranscribeModel):
         except APIError as e:
             self.logger.error(f"Ошибка OpenAI API при транскрипции аудио: {e}")
             raise
+        
 
 class OpenAIImageModel(ImageGenerateModel):
 
@@ -266,9 +359,20 @@ class OpenAIImageModel(ImageGenerateModel):
         self,
         prompt: str,
         n: Optional[int] = None,
+        output_path: Optional[Union[str, Path]] = None,
+        as_bytes: bool = True,
         **kwargs
-    ) -> list[bytes]:
+    ) -> Union[list[bytes], list[Path]]:
+        """
+        Сгенерировать изображения по текстовому описанию.
 
+        :param prompt: описание изображения
+        :param n: количество изображений
+        :param output_path: путь для сохранения (если None — имя будет auto)
+        :param as_bytes: если True — вернуть список байт, иначе список файлов
+        :param kwargs: дополнительные параметры API (size, quality, и т.д.)
+        :return: list[bytes] или list[Path]
+        """
         try:
             resp = self.client.images.generate(
                 model=self.model_name,
@@ -277,13 +381,31 @@ class OpenAIImageModel(ImageGenerateModel):
                 **kwargs
             )
 
-            images_data = []
-            for i, img_info in enumerate(resp.data):
+            results = []
+            for i, img_info in enumerate(resp.data, start=1):
                 img_bytes = base64.b64decode(img_info.b64_json)
-                images_data.append(img_bytes)
-                self.logger.debug(f"Изображение #{i+1} сгенерировано, размер {len(img_bytes)} байт")
 
-            return images_data
+                if as_bytes:
+                    results.append(img_bytes)
+                    self.logger.debug(
+                        f"Изображение #{i} сгенерировано, размер {len(img_bytes)} байт"
+                    )
+                else:
+                    if output_path is None:
+                        file_path = Path(f"openai_image_{i}.png")
+                    else:
+                        output_path = Path(output_path)
+                        if output_path.is_dir():
+                            file_path = output_path / f"openai_image_{i}.png"
+                        else:
+                            stem = output_path.stem
+                            file_path = output_path.with_name(f"{stem}_{i}{output_path.suffix}")
+
+                    file_path.write_bytes(img_bytes)
+                    results.append(file_path)
+                    self.logger.info(f"Изображение #{i} сохранено: {file_path}")
+
+            return results
 
         except APIError as e:
             self.logger.error(f"Ошибка OpenAI API при генерации изображения: {e}")
